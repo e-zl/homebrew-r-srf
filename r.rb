@@ -22,9 +22,17 @@ class R < Formula
   depends_on "sethrfore/r-srf/cairo" => :optional # SRF - Cairo must be build with with X11 support. Use brew install sethrfore/r-srf/cairo
   depends_on "icu4c" => :optional
   # depends_on "pango" => :optional
-  #depends_on "tcl-tk" 
-  # needed to preserve executable permissions on files without shebangs
+  # depends_on "tcl-tk" 
+
+  ## SRF - Fix bzip2 error for Xcode 12
+  ## From here: 
+  ##    https://github.com/wch/r-source/commit/9ba9c7e8651465721f9ac42a731ae4abb9b1ab7d#diff-e2d5a00791bce9a01f99bc6fd613a39d
+  ##    https://github.com/wch/r-source/commit/0588b258ac4bf8bff4da9e41673442ee8f48b41c#diff-e2d5a00791bce9a01f99bc6fd613a39d
+  if MacOS::Xcode.version > "11.0"
+    patch :DATA
+  end
   
+  # Needed to preserve executable permissions on files without shebangs
   skip_clean "lib/R/bin", "lib/R/doc"
 
   resource "gss" do
@@ -153,3 +161,59 @@ class R < Formula
                      "Failed to install gss package"
   end
 end
+
+__END__
+
+diff --git a/configure b/configure
+index 259a12f..aae75b9 100755
+--- a/configure
++++ b/configure
+@@ -45400,10 +45400,12 @@ else
+ /* end confdefs.h.  */
+ 
+ #ifdef HAVE_BZLIB_H
++#include <stdlib.h> // for exit
++#include <string.h> // for strcmp
+ #include <bzlib.h>
+ #endif
+ int main() {
+-    char *ver = BZ2_bzlibVersion();
++    const char *ver = BZ2_bzlibVersion();
+     exit(strcmp(ver, "1.0.6") < 0);
+ }
+ 
+@@ -46109,6 +46111,7 @@ else
+   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+ /* end confdefs.h.  */
+ 
++#include <stdlib.h> // for exit
+ #include <string.h>
+ #include <curl/curl.h>
+ int main()
+diff --git a/m4/R.m4 b/m4/R.m4
+index e4148c7..3bbe962 100644
+--- a/m4/R.m4
++++ b/m4/R.m4
+@@ -3185,10 +3185,12 @@ r_save_LIBS="${LIBS}"
+ LIBS="-lbz2 ${LIBS}"
+ AC_RUN_IFELSE([AC_LANG_SOURCE([[
+ #ifdef HAVE_BZLIB_H
++#include <stdlib.h> // for exit
++#include <string.h> // for strcmp
+ #include <bzlib.h>
+ #endif
+ int main() {
+-    char *ver = BZ2_bzlibVersion();
++    const char *ver = BZ2_bzlibVersion();
+     exit(strcmp(ver, "1.0.6") < 0);
+ }
+ ]])], [r_cv_have_bzlib=yes], [r_cv_have_bzlib=no], [r_cv_have_bzlib=no])
+@@ -4180,6 +4182,7 @@ fi
+ if test "x${have_libcurl}" = "xyes"; then
+ AC_CACHE_CHECK([if libcurl supports https], [r_cv_have_curl_https],
+ [AC_RUN_IFELSE([AC_LANG_SOURCE([[
++#include <stdlib.h> // for exit
+ #include <string.h>
+ #include <curl/curl.h>
+ int main()
+
