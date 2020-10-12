@@ -9,13 +9,13 @@ class R < Formula
   depends_on "gettext"
   depends_on "jpeg"
   depends_on "libpng"
-  depends_on "openblas" => :optional
+  #depends_on "openblas" => :optional
   depends_on "pcre2"
   depends_on "readline"
   depends_on "xz"
 
   ## SRF - Add additional R capabilities (comment out if undesired)
-  depends_on :java => :optional
+  #depends_on :java => :optional
   depends_on :x11 # SRF - X11 necessary for tcl-tk since tk.h includes X11 headers. See section A.2.1 Tcl/Tk at < https://cran.r-project.org/doc/manuals/r-release/R-admin.html >
   depends_on "texinfo" => :optional
   depends_on "libtiff" => :optional
@@ -23,7 +23,15 @@ class R < Formula
   depends_on "icu4c" => :optional
   # depends_on "pango" => :optional
   # depends_on "tcl-tk" 
-
+  ENV["MKLROOT"] = "/opt/intel/compilers_and_libraries_2020.2.258/mac/mkl"
+  ENV["MKL_INCLUDE"]="$MKL_ROOT/include"
+  ENV["R_OPENMP_CFLAGS"]="-fopenmp"
+  ENV["SHLIB_OPENMP_CFLAGS"]="-fopenmp"
+  ENV["SHLIB_OPENMP_CXXFLAGS"]="-fopenmp"
+  ENV["SHLIB_OPENMP_FFLAGS"]="-fopenmp"
+  ENV["SHLIB_OPENMP_FCFLAGS"]=" -fopenmp"
+  ENV["XH"]="/Applications/Xcode-beta.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk"
+  ENV["MKL"]="-lmkl_rt -lpthread"
   ## SRF - Fix bzip2 error for Xcode 12
   ## From here: 
   ##    https://github.com/wch/r-source/commit/9ba9c7e8651465721f9ac42a731ae4abb9b1ab7d#diff-e2d5a00791bce9a01f99bc6fd613a39d
@@ -31,7 +39,8 @@ class R < Formula
   if MacOS::Xcode.version > "11.0"
     patch :DATA
   end
-  
+ 
+
   # Needed to preserve executable permissions on files without shebangs
   skip_clean "lib/R/bin", "lib/R/doc"
 
@@ -46,6 +55,12 @@ class R < Formula
     if MacOS.version == "10.11" && MacOS::Xcode.installed? &&
        MacOS::Xcode.version >= "8.0"
       ENV["ac_cv_have_decl_clock_gettime"] = "no"
+      ENV.append "CXXFLAGS", "-fPIC -O3  -mavx2  -m64 -I/opt/intel/compilers_and_libraries_2020.2.258/mac/mkl/include"
+      ENV.append "FFLAGS", "-fPIC -O3  -mavx2  -m64 -I/opt/intel/compilers_and_libraries_2020.2.258/mac/mkl/include"
+      ENV.append "FCFLAGS", "-fPIC -O3  -mavx2  -m64 -I/opt/intel/compilers_and_libraries_2020.2.258/mac/mkl/include"
+      ENV.append "CPPFLAGS", "-I/opt/intel/compilers_and_libraries_2020.2.258/mac/mkl/include"
+      ENV.append "FCFLAGS", "-fPIC -O3  -mavx2  -m64 -I/opt/intel/compilers_and_libraries_2020.2.258/mac/mkl/include"
+      ENV.append "LDFLAGS","-L/opt/intel/compilers_and_libraries_2020.2.258/mac/mkl/lib -Wl,-rpath, /opt/intel/compilers_and_libraries_2020.2.258/mac/mkl/lib -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -ldl"    
     end
 
     ## YT - enable tcl-tk support using system headers
@@ -53,10 +68,8 @@ class R < Formula
       ## YT - Set up some  environment variables and over-write some variables defined in tclConfig.sh and tkConfig.sh 
       ENV["TCL_INCLUDE_SPEC"] = "-I#{MacOS.sdk_path}/System/Library/Frameworks/Tcl.framework/Versions/8.5/Headers"
       ENV["TK_INCLUDE_SPEC"] = "-I#{MacOS.sdk_path}/System/Library/Frameworks/Tk.framework/Versions/8.5/Headers"
-      ENV["TCLTK_CPPFLAGS"] = "-I#{MacOS.sdk_path}/System/Library/Frameworks/Tcl.framework/Versions/8.5/Headers \
-                -I#{MacOS.sdk_path}/System/Library/Frameworks/Tk.framework/Versions/8.5/Headers"
-      ENV["TCLTK_LIBS"] = "-F#{MacOS.sdk_path}/System/Library/Frameworks -framework Tk \
-               -F#{MacOS.sdk_path}/System/Library/Frameworks -framework Tcl"
+      ENV["TCLTK_CPPFLAGS"] = "-I#{MacOS.sdk_path}/System/Library/Frameworks/Tcl.framework/Versions/8.5/Headers -I#{MacOS.sdk_path}/System/Library/Frameworks/Tk.framework/Versions/8.5/Headers"
+      ENV["TCLTK_LIBS"] = "-F#{MacOS.sdk_path}/System/Library/Frameworks -framework Tk -F#{MacOS.sdk_path}/System/Library/Frameworks -framework Tcl"
     end
 
     ## YT - If homebrew's tcl-tk is to be used, this line should be uncommented
@@ -67,7 +80,9 @@ class R < Formula
       "--with-x", # SRF - Add X11 support (comment --without-x). Necessary for tcl-tk support.
       #"--without-x",  # YT - If Homebrew's tcl-tk is to be used, '--with-x' cause an error 
       "--with-aqua",
-      "--with-lapack",
+      #"--with-blas=-Wl,-rpath,/opt/intel/compilers_and_libraries_2020.2.258/mac/mkl/lib -lmkl_rt -lpthread -lm -ldl",
+      #"--with-blas=-lmkl_rt",
+      #"--with-lapack",
       "--enable-R-shlib",
       "SED=/usr/bin/sed", # don't remember Homebrew's sed shim
       "--with-tcltk", # SRF - Add tcl-tk support.
@@ -84,10 +99,14 @@ class R < Formula
       args << "--with-blas=-L#{Formula["openblas"].opt_lib} -lopenblas"
       ENV.append "LDFLAGS", "-L#{Formula["openblas"].opt_lib}"
     else
-      args << "--with-blas=-framework Accelerate"
-      ENV.append_to_cflags "-D__ACCELERATE__" if ENV.compiler != :clang
+      # args << "--with-blas=-framework Accelerate"
+      # ENV.append_to_cflags "-D__ACCELERATE__" if ENV.compiler != :clang
+      args << "--with-blas=-/opt/intel/compilers_and_libraries_2020.2.258/mac/mkl/lib/lmkl_rt"<< "--with-lapack"
+      ENV.append_to_cflags "-fPIC -O3 -mavx2 -m64 -I/opt/intel/compilers_and_libraries_2020.2.258/mac/mkl/include"
+      #if ENV.compiler != :clang
     end
 
+ 
     if build.with? "java"
       args << "--enable-java"
     else
@@ -100,11 +119,11 @@ class R < Formula
     else
       args << "--without-cairo"
     end
-
+    
     # Help CRAN packages find gettext and readline
     ["gettext", "readline"].each do |f|
-      ENV.append "CPPFLAGS", "-I#{Formula[f].opt_include}"
-      ENV.append "LDFLAGS", "-L#{Formula[f].opt_lib}"
+     ENV.append "CPPFLAGS", "-I#{Formula[f].opt_include}"
+     ENV.append "LDFLAGS", "-L#{Formula[f].opt_lib}"
     end
 
     ## SRF - Help CRAN packages find icu4c (e.g. rJava)
